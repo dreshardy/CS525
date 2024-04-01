@@ -46,182 +46,183 @@ int findFreeSlot(char *data, int recordSize)
 // ******** TABLE AND RECORD MANAGER FUNCTIONS ******** //
 
 // This function initializes the Record Manager
-extern RC initRecordManager (void *mgmtData)
+extern RC initialize_RecordManager(void *managementData)
 {
-	// Initiliazing Storage Manager
-	initStorageManager();
-	return RC_OK;
+    // Initializing Storage Manager
+    initialize_StorageManager();
+    return RC_OK;
 }
 
-// This functions shuts down the Record Manager
-extern RC shutdownRecordManager ()
+// This function shuts down the Record Manager
+extern RC shutdown_RecordManager()
 {
-	recordManager = NULL;
-	free(recordManager);
-	return RC_OK;
+    recordHandler = NULL;
+    free(recordHandler);
+    return RC_OK;
 }
 
-// This function creates a TABLE with table name "name" having schema specified by "schema"
-extern RC createTable (char *name, Schema *schema)
+// This function creates a TABLE with table name "tableName" having schema specified by "tableSchema"
+extern RC create_Table(char *tableName, Schema *tableSchema)
 {
-	// Allocating memory space to the record manager custom data structure
-	recordManager = (RecordManager*) malloc(sizeof(RecordManager));
+    // Allocating memory space to the record handler custom data structure
+    recordHandler = (RecordHandler*) malloc(sizeof(RecordHandler));
 
-	// Initalizing the Buffer Pool using LFU page replacement policy
-	initBufferPool(&recordManager->bufferPool, name, MAX_NUMBER_OF_PAGES, RS_LRU, NULL);
+    // Initializing the Buffer Pool using LRU page replacement policy
+    initialize_BufferPool(&recordHandler->bufferPool, tableName, MAX_NUMBER_OF_PAGES, RS_LRU, NULL);
 
-	char data[PAGE_SIZE];
-	char *pageHandle = data;
-	 
-	int result, k;
+    char data[PAGE_SIZE];
+    char *pagePointer = data;
 
-	// Setting number of tuples to 0
-	*(int*)pageHandle = 0; 
+    int result, k;
 
-	// Incrementing pointer by sizeof(int) because 0 is an integer
-	pageHandle = pageHandle + sizeof(int);
-	
-	// Setting first page to 1 since 0th page if for schema and other meta data
-	*(int*)pageHandle = 1;
+    // Setting number of tuples to 0
+    *(int*)pagePointer = 0;
 
-	// Incrementing pointer by sizeof(int) because 1 is an integer
-	pageHandle = pageHandle + sizeof(int);
+    // Incrementing pointer by sizeof(int) because 0 is an integer
+    pagePointer = pagePointer + sizeof(int);
 
-	// Setting the number of attributes
-	*(int*)pageHandle = schema->numAttr;
+    // Setting first page to 1 since 0th page if for schema and other meta data
+    *(int*)pagePointer = 1;
 
-	// Incrementing pointer by sizeof(int) because number of attributes is an integer
-	pageHandle = pageHandle + sizeof(int); 
+    // Incrementing pointer by sizeof(int) because 1 is an integer
+    pagePointer = pagePointer + sizeof(int);
 
-	// Setting the Key Size of the attributes
-	*(int*)pageHandle = schema->keySize;
+    // Setting the number of attributes
+    *(int*)pagePointer = tableSchema->numAttr;
 
-	// Incrementing pointer by sizeof(int) because Key Size of attributes is an integer
-	pageHandle = pageHandle + sizeof(int);
-	
-	for(k = 0; k < schema->numAttr; k++)
-    	{
-		// Setting attribute name
-       		strncpy(pageHandle, schema->attrNames[k], ATTRIBUTE_SIZE);
-	       	pageHandle = pageHandle + ATTRIBUTE_SIZE;
-	
-		// Setting data type of attribute
-	       	*(int*)pageHandle = (int)schema->dataTypes[k];
+    // Incrementing pointer by sizeof(int) because number of attributes is an integer
+    pagePointer = pagePointer + sizeof(int);
 
-		// Incrementing pointer by sizeof(int) because we have data type using integer constants
-	       	pageHandle = pageHandle + sizeof(int);
+    // Setting the Key Size of the attributes
+    *(int*)pagePointer = tableSchema->keySize;
 
-		// Setting length of datatype of the attribute
-	       	*(int*)pageHandle = (int) schema->typeLength[k];
+    // Incrementing pointer by sizeof(int) because Key Size of attributes is an integer
+    pagePointer = pagePointer + sizeof(int);
 
-		// Incrementing pointer by sizeof(int) because type length is an integer
-	       	pageHandle = pageHandle + sizeof(int);
-    	}
+    for(k = 0; k < tableSchema->numAttr; k++)
+    {
+        // Setting attribute name
+        strncpy(pagePointer, tableSchema->attrNames[k], ATTRIBUTE_SIZE);
+        pagePointer = pagePointer + ATTRIBUTE_SIZE;
 
-	SM_FileHandle fileHandle;
-		
-	// Creating a page file page name as table name using storage manager
-	if((result = createPageFile(name)) != RC_OK)
-		return result;
-		
-	// Opening the newly created page
-	if((result = openPageFile(name, &fileHandle)) != RC_OK)
-		return result;
-		
-	// Writing the schema to first location of the page file
-	if((result = writeBlock(0, &fileHandle, data)) != RC_OK)
-		return result;
-		
-	// Closing the file after writing
-	if((result = closePageFile(&fileHandle)) != RC_OK)
-		return result;
+        // Setting data type of attribute
+        *(int*)pagePointer = (int)tableSchema->dataTypes[k];
 
-	return RC_OK;
+        // Incrementing pointer by sizeof(int) because we have data type using integer constants
+        pagePointer = pagePointer + sizeof(int);
+
+        // Setting length of datatype of the attribute
+        *(int*)pagePointer = (int) tableSchema->typeLength[k];
+
+        // Incrementing pointer by sizeof(int) because type length is an integer
+        pagePointer = pagePointer + sizeof(int);
+    }
+
+    SM_FileHandle fileHandler;
+
+    // Creating a page file page name as table name using storage manager
+    if((result = create_PageFile(tableName)) != RC_OK)
+        return result;
+
+    // Opening the newly created page
+    if((result = open_PageFile(tableName, &fileHandler)) != RC_OK)
+        return result;
+
+    // Writing the schema to first location of the page file
+    if((result = write_Block(0, &fileHandler, data)) != RC_OK)
+        return result;
+
+    // Closing the file after writing
+    if((result = close_PageFile(&fileHandler)) != RC_OK)
+        return result;
+
+    return RC_OK;
 }
 
-// This function opens the table with table name "name"
-extern RC openTable (RM_TableData *rel, char *name)
+// This function opens the table with table name "tableName"
+extern RC open_Table(RM_TableData *tableData, char *tableName)
 {
-	SM_PageHandle pageHandle;    
-	
-	int attributeCount, k;
-	
-	// Setting table's meta data to our custom record manager meta data structure
-	rel->mgmtData = recordManager;
-	// Setting the table's name
-	rel->name = name;
-    
-	// Pinning a page i.e. putting a page in Buffer Pool using Buffer Manager
-	pinPage(&recordManager->bufferPool, &recordManager->pageHandle, 0);
-	
-	// Setting the initial pointer (0th location) if the record manager's page data
-	pageHandle = (char*) recordManager->pageHandle.data;
-	
-	// Retrieving total number of tuples from the page file
-	recordManager->tuplesCount= *(int*)pageHandle;
-	pageHandle = pageHandle + sizeof(int);
+    SM_PageHandle pagePointer;
 
-	// Getting free page from the page file
-	recordManager->freePage= *(int*) pageHandle;
-    	pageHandle = pageHandle + sizeof(int);
-	
-	// Getting the number of attributes from the page file
-    	attributeCount = *(int*)pageHandle;
-	pageHandle = pageHandle + sizeof(int);
- 	
-	Schema *schema;
+    int attributeCount, k;
 
-	// Allocating memory space to 'schema'
-	schema = (Schema*) malloc(sizeof(Schema));
-    
-	// Setting schema's parameters
-	schema->numAttr = attributeCount;
-	schema->attrNames = (char**) malloc(sizeof(char*) *attributeCount);
-	schema->dataTypes = (DataType*) malloc(sizeof(DataType) *attributeCount);
-	schema->typeLength = (int*) malloc(sizeof(int) *attributeCount);
+    // Setting table's meta data to our custom record handler meta data structure
+    tableData->mgmtData = recordHandler;
+    // Setting the table's name
+    tableData->name = tableName;
 
-	// Allocate memory space for storing attribute name for each attribute
-	for(k = 0; k < attributeCount; k++)
-		schema->attrNames[k]= (char*) malloc(ATTRIBUTE_SIZE);
-      
-	for(k = 0; k < schema->numAttr; k++)
-    	{
-		// Setting attribute name
-		strncpy(schema->attrNames[k], pageHandle, ATTRIBUTE_SIZE);
-		pageHandle = pageHandle + ATTRIBUTE_SIZE;
-	   
-		// Setting data type of attribute
-		schema->dataTypes[k]= *(int*) pageHandle;
-		pageHandle = pageHandle + sizeof(int);
+    // Pinning a page i.e. putting a page in Buffer Pool using Buffer Manager
+    pin_Page(&recordHandler->bufferPool, &recordHandler->pageHandle, 0);
 
-		// Setting length of datatype (length of STRING) of the attribute
-		schema->typeLength[k]= *(int*)pageHandle;
-		pageHandle = pageHandle + sizeof(int);
-	}
-	
-	// Setting newly created schema to the table's schema
-	rel->schema = schema;	
+    // Setting the initial pointer (0th location) if the record handler's page data
+    pagePointer = (char*) recordHandler->pageHandle.data;
 
-	// Unpinning the page i.e. removing it from Buffer Pool using BUffer Manager
-	unpinPage(&recordManager->bufferPool, &recordManager->pageHandle);
+    // Retrieving total number of tuples from the page file
+    recordHandler->tuplesCount = *(int*)pagePointer;
+    pagePointer = pagePointer + sizeof(int);
 
-	// Write the page back to disk using BUffer Manger
-	forcePage(&recordManager->bufferPool, &recordManager->pageHandle);
+    // Getting free page from the page file
+    recordHandler->freePage = *(int*) pagePointer;
+    pagePointer = pagePointer + sizeof(int);
 
-	return RC_OK;
-}   
-  
-// This function closes the table referenced by "rel"
-extern RC closeTable (RM_TableData *rel)
-{
-	// Storing the Table's meta data
-	RecordManager *recordManager = rel->mgmtData;
-	
-	// Shutting down Buffer Pool	
-	shutdownBufferPool(&recordManager->bufferPool);
-	//rel->mgmtData = NULL;
-	return RC_OK;
+    // Getting the number of attributes from the page file
+    attributeCount = *(int*)pagePointer;
+    pagePointer = pagePointer + sizeof(int);
+
+    Schema *tableSchema;
+
+    // Allocating memory space to 'tableSchema'
+    tableSchema = (Schema*) malloc(sizeof(Schema));
+
+    // Setting schema's parameters
+    tableSchema->numAttr = attributeCount;
+    tableSchema->attrNames = (char**) malloc(sizeof(char*) *attributeCount);
+    tableSchema->dataTypes = (DataType*) malloc(sizeof(DataType) *attributeCount);
+    tableSchema->typeLength = (int*) malloc(sizeof(int) *attributeCount);
+
+    // Allocate memory space for storing attribute name for each attribute
+    for(k = 0; k < attributeCount; k++)
+        tableSchema->attrNames[k] = (char*) malloc(ATTRIBUTE_SIZE);
+
+    for(k = 0; k < tableSchema->numAttr; k++)
+    {
+        // Setting attribute name
+        strncpy(tableSchema->attrNames[k], pagePointer, ATTRIBUTE_SIZE);
+        pagePointer = pagePointer + ATTRIBUTE_SIZE;
+
+        // Setting data type of attribute
+        tableSchema->dataTypes[k] = *(int*) pagePointer;
+        pagePointer = pagePointer + sizeof(int);
+
+        // Setting length of datatype (length of STRING) of the attribute
+        tableSchema->typeLength[k] = *(int*)pagePointer;
+        pagePointer = pagePointer + sizeof(int);
+    }
+
+    // Setting newly created schema to the table's schema
+    tableData->schema = tableSchema;
+
+    // Unpinning the page i.e. removing it from Buffer Pool using Buffer Manager
+    unpin_Page(&recordHandler->bufferPool, &recordHandler->pageHandle);
+
+    // Write the page back to disk using Buffer Manager
+    force_Page(&recordHandler->bufferPool, &recordHandler->pageHandle);
+
+    return RC_OK;
 }
+
+// This function closes the table referenced by "tableData"
+extern RC close_Table(RM_TableData *tableData)
+{
+    // Storing the Table's meta data
+    RecordHandler *recordHandler = tableData->mgmtData;
+
+    // Shutting down Buffer Pool
+    shutdown_BufferPool(&recordHandler->bufferPool);
+    //tableData->mgmtData = NULL;
+    return RC_OK;
+}
+
 
 // This function deletes the table having table name "name"
 extern RC deleteTable (char *name)
